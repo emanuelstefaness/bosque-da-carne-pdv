@@ -10,6 +10,3 @@ backend/pdv_bosque.db-shm
 .env
 *.log
 ULTIMO_LINK_TUNEL.txt
-
-# Restos da pasta antiga aninhada (apague a pasta quando o Windows liberar).
-pdvbosque-main/
