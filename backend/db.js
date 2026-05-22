@@ -38,6 +38,7 @@ export function initDb() {
       is_side INTEGER DEFAULT 0,
       is_prato_feito INTEGER DEFAULT 0,
       is_arvoredo INTEGER DEFAULT 0,
+      internal_only INTEGER DEFAULT 0,
       FOREIGN KEY (category_id) REFERENCES categories(id)
     );
 
@@ -180,6 +181,12 @@ export function initDb() {
     } catch (e) {
       if (!e.message || !e.message.includes('duplicate column')) throw e;
     }
+  }
+
+  try {
+    db.exec('ALTER TABLE items ADD COLUMN internal_only INTEGER DEFAULT 0');
+  } catch (e) {
+    if (!e.message || !e.message.includes('duplicate column')) throw e;
   }
 
   // Bar: fila só para categorias do bar; remove status bar de itens fora da lista

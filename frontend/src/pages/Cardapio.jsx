@@ -91,7 +91,8 @@ export default function Cardapio() {
         is_kitchen: !!payload.is_kitchen,
         is_bar: !!payload.is_bar,
         is_side: !!payload.is_side,
-        is_prato_feito: !!payload.is_prato_feito
+        is_prato_feito: !!payload.is_prato_feito,
+        internal_only: !!payload.internal_only
       }
       if (modalItem.type === 'new') await createItem(p)
       else await updateItem(modalItem.item.id, p)
@@ -104,7 +105,13 @@ export default function Cardapio() {
   }
 
   const handleDeleteItem = async (id) => {
-    if (!window.confirm('Excluir este item do cardápio?')) return
+    if (
+      !window.confirm(
+        'Excluir este item do cardápio?\n\n' +
+          'Se ele já tiver sido lançado em comandas ou pedidos online, as linhas desses pedidos que usam este item também serão apagadas (o histórico deixa de mostrar esse produto nesses pedidos).'
+      )
+    )
+      return
     setError('')
     try {
       await deleteItem(id)
@@ -205,6 +212,7 @@ export default function Cardapio() {
                   <th className="p-2 font-medium">Categoria</th>
                   <th className="p-2 font-medium">Preço</th>
                   <th className="p-2 font-medium">Setores</th>
+                  <th className="p-2 font-medium">Pedir online</th>
                   <th className="p-2 font-medium w-28">Ações</th>
                 </tr>
               </thead>
@@ -218,6 +226,13 @@ export default function Cardapio() {
                       {[i.is_grill && 'Churrasq.', i.is_kitchen && 'Cozinha', i.is_bar && 'Bar'].filter(Boolean).join(', ') || '-'}
                       {i.requires_meat_point ? ' · Ponto' : ''}
                       {i.is_prato_feito ? ' · Prato Feito' : ''}
+                    </td>
+                    <td className="p-2 text-xs">
+                      {i.internal_only ? (
+                        <span className="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-900">Só PDV interno</span>
+                      ) : (
+                        <span className="text-slate-600">Sim</span>
+                      )}
                     </td>
                     <td className="p-2">
                       <button type="button" className="btn btn-info text-sm mr-2" onClick={() => setModalItem({ type: 'edit', item: i })}>Editar</button>
@@ -303,6 +318,7 @@ function ModalItem({ modal, categories, onClose, onSave }) {
   const [is_bar, setIs_bar] = useState(false)
   const [is_side, setIs_side] = useState(false)
   const [is_prato_feito, setIs_prato_feito] = useState(false)
+  const [internal_only, setInternal_only] = useState(false)
 
   useEffect(() => {
     if (isEdit && item) {
@@ -316,6 +332,7 @@ function ModalItem({ modal, categories, onClose, onSave }) {
       setIs_bar(!!item.is_bar)
       setIs_side(!!item.is_side)
       setIs_prato_feito(!!item.is_prato_feito)
+      setInternal_only(!!item.internal_only)
       return
     }
     setName('')
@@ -327,6 +344,7 @@ function ModalItem({ modal, categories, onClose, onSave }) {
     setIs_bar(false)
     setIs_side(false)
     setIs_prato_feito(false)
+    setInternal_only(false)
     setCategory_id(firstCategoryId(categories))
   }, [isEdit, item?.id, modal.type])
 
@@ -345,7 +363,19 @@ function ModalItem({ modal, categories, onClose, onSave }) {
     if (!Number.isFinite(catId) || catId < 1 || Number.isNaN(p) || p < 0) {
       return
     }
-    onSave({ category_id: catId, name: name.trim(), price: p, description: description.trim() || null, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito })
+    onSave({
+      category_id: catId,
+      name: name.trim(),
+      price: p,
+      description: description.trim() || null,
+      requires_meat_point,
+      is_grill,
+      is_kitchen,
+      is_bar,
+      is_side,
+      is_prato_feito,
+      internal_only
+    })
   }
 
   const categoryValid = categories.some((c) => String(c.id) === String(category_id))
@@ -384,6 +414,13 @@ function ModalItem({ modal, categories, onClose, onSave }) {
             <label className="flex items-center gap-2"><input type="checkbox" checked={is_bar} onChange={(e) => setIs_bar(e.target.checked)} /> Bar</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={is_side} onChange={(e) => setIs_side(e.target.checked)} /> Acompanhamento</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={is_prato_feito} onChange={(e) => setIs_prato_feito(e.target.checked)} /> Prato Feito</label>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-1" checked={internal_only} onChange={(e) => setInternal_only(e.target.checked)} />
+              <span>
+                <span className="font-medium text-slate-800">Só controle interno</span>
+                <span className="block text-xs font-normal text-slate-500">Não aparece no cardápio do pedir online nem pode ser pedido por esse canal.</span>
+              </span>
+            </label>
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn btn-secondary flex-1" onClick={onClose}>Cancelar</button>

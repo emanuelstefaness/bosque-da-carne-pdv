@@ -14,15 +14,23 @@ publicRouter.get('/', (req, res) => {
   res.json({ ok: true, message: 'API pública pedidos online' });
 });
 
-// Cardápio para pedidos online (categorias + itens, sem dados internos)
+// Cardápio para pedidos online (categorias + itens visíveis ao cliente; itens `internal_only` ficam só no PDV interno)
 publicRouter.get('/menu', (req, res) => {
   const db = getDb(req);
-  const categories = db.prepare('SELECT id, name, slug, sort_order FROM categories ORDER BY sort_order, name').all();
   const items = db.prepare(`
     SELECT i.id, i.category_id, i.name, i.price, i.description, i.is_prato_feito
     FROM items i
+    WHERE COALESCE(i.internal_only, 0) = 0
     ORDER BY i.category_id, i.name
   `).all();
+  const catIds = [...new Set(items.map((row) => row.category_id).filter((id) => id != null))];
+  let categories = [];
+  if (catIds.length) {
+    const ph = catIds.map(() => '?').join(',');
+    categories = db
+      .prepare(`SELECT id, name, slug, sort_order FROM categories WHERE id IN (${ph}) ORDER BY sort_order, name`)
+      .all(...catIds);
+  }
   res.json({ categories, items });
 });
 
@@ -79,8 +87,13 @@ publicRouter.post('/orders', (req, res) => {
   for (const row of cartItems) {
     const itemId = Number(row.item_id);
     const qty = Math.max(1, Math.floor(Number(row.quantity) || 1));
-    const item = db.prepare('SELECT id, price, name, is_prato_feito FROM items WHERE id = ?').get(itemId);
+    const item = db
+      .prepare('SELECT id, price, name, is_prato_feito, COALESCE(internal_only, 0) AS internal_only FROM items WHERE id = ?')
+      .get(itemId);
     if (!item) continue;
+    if (Number(item.internal_only) === 1) {
+      return res.status(400).json({ error: 'Um ou mais itens não estão disponíveis para pedido online.' });
+    }
     let pratoFeitoEspetinhoId = null;
     if (Number(item.is_prato_feito) === 1) {
       const selectedEsp = Number(row.prato_feito_espetinho_id);
@@ -90,7 +103,9 @@ publicRouter.post('/orders', (req, res) => {
       const esp = db.prepare(`
         SELECT i.id
         FROM items i
-        WHERE i.id = ? AND (? IS NOT NULL AND i.category_id = ?)
+        WHERE i.id = ?
+          AND (? IS NOT NULL AND i.category_id = ?)
+          AND COALESCE(i.internal_only, 0) = 0
       `).get(selectedEsp, espetinhosCategoryId, espetinhosCategoryId);
       if (!esp) {
         return res.status(400).json({ error: `Espetinho inválido para o item "${item.name}".` });

@@ -81,7 +81,7 @@ menuRouter.get('/items/:id', (req, res) => {
 
 menuRouter.post('/items', (req, res) => {
   const db = getDb(req);
-  const { category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito } = req.body || {};
+  const { category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito, internal_only } = req.body || {};
   const cid = Number(category_id);
   const nome = String(name || '').trim();
   const preco = Number(price);
@@ -90,9 +90,10 @@ menuRouter.post('/items', (req, res) => {
   if (Number.isNaN(preco) || preco < 0) return res.status(400).json({ error: 'Preço inválido' });
   const cat = db.prepare('SELECT id FROM categories WHERE id = ?').get(cid);
   if (!cat) return res.status(400).json({ error: 'Categoria não encontrada' });
+  const internal = internal_only ? 1 : 0;
   const r = db.prepare(`
-    INSERT INTO items (category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO items (category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito, internal_only)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     cid, nome, preco,
     description != null ? String(description).trim() : null,
@@ -101,7 +102,8 @@ menuRouter.post('/items', (req, res) => {
     is_kitchen ? 1 : 0,
     is_bar ? 1 : 0,
     is_side ? 1 : 0,
-    is_prato_feito ? 1 : 0
+    is_prato_feito ? 1 : 0,
+    internal
   );
   const item = db.prepare('SELECT * FROM items WHERE id = ?').get(r.lastInsertRowid);
   res.status(201).json(item);
@@ -112,7 +114,7 @@ menuRouter.patch('/items/:id', (req, res) => {
   const id = Number(req.params.id);
   const item = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
   if (!item) return res.status(404).json({ error: 'Item não encontrado' });
-  const { category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito } = req.body || {};
+  const { category_id, name, price, description, requires_meat_point, is_grill, is_kitchen, is_bar, is_side, is_prato_feito, internal_only } = req.body || {};
   const updates = [];
   const values = [];
   if (category_id !== undefined) { updates.push('category_id = ?'); values.push(Number(category_id)); }
@@ -125,6 +127,7 @@ menuRouter.patch('/items/:id', (req, res) => {
   if (is_bar !== undefined) { updates.push('is_bar = ?'); values.push(is_bar ? 1 : 0); }
   if (is_side !== undefined) { updates.push('is_side = ?'); values.push(is_side ? 1 : 0); }
   if (is_prato_feito !== undefined) { updates.push('is_prato_feito = ?'); values.push(is_prato_feito ? 1 : 0); }
+  if (internal_only !== undefined) { updates.push('internal_only = ?'); values.push(internal_only ? 1 : 0); }
   if (updates.length === 0) return res.json(item);
   values.push(id);
   db.prepare(`UPDATE items SET ${updates.join(', ')} WHERE id = ?`).run(...values);
@@ -137,9 +140,38 @@ menuRouter.delete('/items/:id', (req, res) => {
   const id = Number(req.params.id);
   const item = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
   if (!item) return res.status(404).json({ error: 'Item não encontrado' });
-  db.prepare('DELETE FROM items WHERE id = ?').run(id);
-  db.prepare('DELETE FROM espetinhos_for_prato_feito WHERE item_id = ? OR espetinho_id = ?').run(id, id);
-  res.json({ deleted: id });
+
+  const countPedidos = db.prepare('SELECT COUNT(*) as n FROM pedidos WHERE item_id = ?').get(id).n;
+  const countOrderItems = db.prepare('SELECT COUNT(*) as n FROM order_items WHERE item_id = ?').get(id).n;
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE pedidos SET prato_feito_espetinho_id = NULL WHERE prato_feito_espetinho_id = ?').run(id);
+    db.prepare(`
+      DELETE FROM pedido_sector_status
+      WHERE pedido_id IN (SELECT id FROM pedidos WHERE item_id = ?)
+    `).run(id);
+    db.prepare('DELETE FROM pedidos WHERE item_id = ?').run(id);
+    db.prepare('DELETE FROM order_items WHERE item_id = ?').run(id);
+    db.prepare('DELETE FROM espetinhos_for_prato_feito WHERE item_id = ? OR espetinho_id = ?').run(id, id);
+    db.prepare('DELETE FROM items WHERE id = ?').run(id);
+  });
+
+  try {
+    tx();
+    res.json({
+      deleted: id,
+      removed_pedidos: countPedidos,
+      removed_order_items: countOrderItems
+    });
+  } catch (e) {
+    if (e && (e.code === 'SQLITE_CONSTRAINT_FOREIGNKEY' || String(e.message || '').includes('FOREIGN KEY'))) {
+      return res.status(409).json({
+        error:
+          'Não foi possível excluir este item: ainda existe vínculo no banco (relatório ou outro registro). Se o erro persistir, reinicie o servidor e tente de novo.'
+      });
+    }
+    throw e;
+  }
 });
 
 menuRouter.get('/espetinhos', (req, res) => {

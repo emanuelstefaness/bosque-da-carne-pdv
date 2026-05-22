@@ -8,10 +8,6 @@ import {
   PRECO_HAMBURGUER_EXTRA
 } from '../utils/lancheAddons'
 
-const CAIXA_SLUGS = [
-  'espetinhos', 'porcoes', 'lanches', 'bebidas', 'caipirinhas', 'chopp-cerveja',
-  'acompanhamentos', 'doses', 'pratos', 'sobremesas', 'drinks',
-]
 const MEAT_POINTS = ['mal passado', 'ao ponto', 'bem passado']
 const DOSE_STANDALONE = new Set(['Red Bull', 'Coca-Cola 350ml'])
 const DOSE_ACCOMP = ['Gelo de coco']
@@ -33,7 +29,11 @@ export default function CaixaQuickAdd({ comandaId, comandaStatus, onItemAdded })
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    getCategories().then((l) => setCategories(l.filter((c) => CAIXA_SLUGS.includes(c.slug))))
+    getCategories().then((l) =>
+      setCategories(
+        l.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name).localeCompare(String(b.name), 'pt-BR'))
+      )
+    )
     getEspetinhos().then(setEspetinhos)
   }, [])
 

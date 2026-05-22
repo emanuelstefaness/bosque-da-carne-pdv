@@ -49,7 +49,9 @@ export default function Pedidos() {
 
   const loadCategories = async () => {
     const list = await getCategories()
-    setCategories(list.filter(c => ['espetinhos','porcoes','lanches','bebidas','caipirinhas','chopp-cerveja','acompanhamentos','doses','pratos','sobremesas','drinks'].includes(c.slug)))
+    setCategories(
+      list.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.name).localeCompare(String(b.name), 'pt-BR'))
+    )
   }
   const loadItems = async (cid) => {
     const list = await getItems(cid)
