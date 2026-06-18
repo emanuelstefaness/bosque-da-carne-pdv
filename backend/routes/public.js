@@ -2,12 +2,10 @@ import { Router } from 'express';
 import { broadcastAll } from '../socket.js';
 import { getPedidoSector } from '../itemSector.js';
 import { resolveLancheAddonsFromBody } from '../lancheAddons.js';
+import { getTaxaEntregaDelivery, entregaGratisAtiva } from '../deliveryFee.js';
 
 export const publicRouter = Router();
 const getDb = (req) => req.app.get('db');
-
-/** Taxa fixa de entrega (R$), somada ao total em pedidos `tipo === 'delivery'`. */
-const TAXA_ENTREGA_DELIVERY = 10;
 
 // Diagnóstico: confirma que a API pública está no ar
 publicRouter.get('/', (req, res) => {
@@ -31,7 +29,13 @@ publicRouter.get('/menu', (req, res) => {
       .prepare(`SELECT id, name, slug, sort_order FROM categories WHERE id IN (${ph}) ORDER BY sort_order, name`)
       .all(...catIds);
   }
-  res.json({ categories, items });
+  const taxa_entrega_delivery = getTaxaEntregaDelivery();
+  res.json({
+    categories,
+    items,
+    taxa_entrega_delivery,
+    entrega_gratis: entregaGratisAtiva(),
+  });
 });
 
 // Criar pedido online → cria order, comanda (id 201+), pedidos; emite alerta
@@ -145,7 +149,7 @@ publicRouter.post('/orders', (req, res) => {
     return res.status(400).json({ error: 'Nenhum item válido no pedido' });
   }
   if (tipo === 'delivery') {
-    valorTotal += TAXA_ENTREGA_DELIVERY;
+    valorTotal += getTaxaEntregaDelivery();
   }
 
   const run = db.transaction(() => {

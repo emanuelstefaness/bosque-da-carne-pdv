@@ -1,3 +1,6 @@
+/** URL pública da API (Cloudflare Tunnel no PC do restaurante). */
+export const DEFAULT_PRODUCTION_API = 'https://pdv.bosquecarne.work';
+
 /**
  * Base da API (sem barra final).
  * Em dev, ao abrir o Vite pelo IP da rede (ex.: celular), usa http://<host>:3001 direto —
@@ -8,7 +11,7 @@ export function getApiBase() {
   if (env != null && String(env).trim() !== '') {
     return String(env).replace(/\/$/, '');
   }
-  if (!import.meta.env.DEV) return '';
+  if (!import.meta.env.DEV) return DEFAULT_PRODUCTION_API;
   if (typeof window === 'undefined') return '';
   const h = window.location.hostname;
   if (h === 'localhost' || h === '127.0.0.1') return '';

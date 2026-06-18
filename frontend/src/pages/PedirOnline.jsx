@@ -17,8 +17,8 @@ import {
 } from '../utils/lancheAddons'
 
 const API = getApiBase()
-/** Taxa fixa de entrega (R$) para pedidos delivery (igual ao backend `public.js`). */
-const TAXA_ENTREGA_DELIVERY = 10
+/** Fallback se a API ainda não devolveu a taxa (backend antigo). */
+const TAXA_ENTREGA_FALLBACK = 10
 
 const BEBIDAS_SLUGS = ['bebidas', 'caipirinhas']
 const HIDDEN_CATEGORY_SLUGS = ['chopp-cerveja', 'drinks', 'doses']
@@ -216,6 +216,8 @@ function ComboCard({ combo, onRequestAddCombo }) {
 export default function PedirOnline() {
   const [step, setStep] = useState('menu')
   const [menu, setMenu] = useState({ categories: [], items: [] })
+  const [taxaEntregaDelivery, setTaxaEntregaDelivery] = useState(TAXA_ENTREGA_FALLBACK)
+  const [entregaGratis, setEntregaGratis] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -264,8 +266,21 @@ export default function PedirOnline() {
           return { ...it, image, imageFallback }
         })
         setMenu({ ...data, items })
+        if (typeof data.taxa_entrega_delivery === 'number') {
+          setTaxaEntregaDelivery(data.taxa_entrega_delivery)
+          setEntregaGratis(data.taxa_entrega_delivery === 0 || !!data.entrega_gratis)
+        } else {
+          setEntregaGratis(!!data.entrega_gratis)
+        }
       })
-      .catch((err) => setError(err.message || 'Erro ao carregar cardápio'))
+      .catch((err) => {
+        const msg = err?.message || ''
+        if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+          setError('Não foi possível conectar à API. O servidor do restaurante precisa estar ligado (backend + túnel Cloudflare).')
+        } else {
+          setError(msg || 'Erro ao carregar cardápio')
+        }
+      })
       .finally(() => setLoading(false))
   }
 
@@ -416,7 +431,7 @@ export default function PedirOnline() {
 
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0)
   const subtotalItens = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart])
-  const taxaEntrega = checkout.tipo === 'delivery' ? TAXA_ENTREGA_DELIVERY : 0
+  const taxaEntrega = checkout.tipo === 'delivery' ? taxaEntregaDelivery : 0
   const totalPrice = subtotalItens + taxaEntrega
 
   const suggestedItems = useMemo(() => {
@@ -797,6 +812,11 @@ export default function PedirOnline() {
           </div>
           <p className="mx-auto mt-1 w-full max-w-5xl text-xs text-slate-300">Pedidos online</p>
         </header>
+        {entregaGratis && (
+          <p className="mx-auto w-full max-w-5xl bg-emerald-600 px-4 py-2 text-center text-sm font-semibold text-white">
+            🚚 Entrega grátis hoje!
+          </p>
+        )}
         {step === 'menu' && (
           <nav className="no-scrollbar mx-auto flex w-full max-w-5xl gap-5 overflow-x-auto border-t border-slate-200 bg-white px-4 py-3">
             {orderedCategories.map((c) => (
@@ -933,10 +953,12 @@ export default function PedirOnline() {
                 <span>Subtotal (itens)</span>
                 <span className="font-semibold">{formatPrice(subtotalItens)}</span>
               </div>
-              {taxaEntrega > 0 && (
+              {checkout.tipo === 'delivery' && (
                 <div className="flex justify-between text-slate-600">
                   <span>Taxa de entrega</span>
-                  <span className="font-semibold">{formatPrice(taxaEntrega)}</span>
+                  <span className={`font-semibold ${taxaEntrega === 0 ? 'text-emerald-600' : ''}`}>
+                    {taxaEntrega === 0 ? 'Grátis' : formatPrice(taxaEntrega)}
+                  </span>
                 </div>
               )}
               <p className="pt-1 text-lg font-bold text-slate-900">Total: {formatPrice(totalPrice)}</p>
@@ -951,7 +973,9 @@ export default function PedirOnline() {
 
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setCheckout((c) => ({ ...c, tipo: 'retirada' }))} className={`rounded-xl border px-4 py-3 font-semibold ${checkout.tipo === 'retirada' ? 'border-[hsl(var(--menu-primary))] bg-orange-50' : 'border-slate-300 bg-white'}`}>Retirada</button>
-              <button type="button" onClick={() => setCheckout((c) => ({ ...c, tipo: 'delivery' }))} className={`rounded-xl border px-4 py-3 font-semibold ${checkout.tipo === 'delivery' ? 'border-[hsl(var(--menu-primary))] bg-orange-50' : 'border-slate-300 bg-white'}`}>Delivery</button>
+              <button type="button" onClick={() => setCheckout((c) => ({ ...c, tipo: 'delivery' }))} className={`rounded-xl border px-4 py-3 font-semibold ${checkout.tipo === 'delivery' ? 'border-[hsl(var(--menu-primary))] bg-orange-50' : 'border-slate-300 bg-white'}`}>
+                Delivery{entregaGratis ? ' · grátis' : ''}
+              </button>
             </div>
 
             {checkout.tipo === 'delivery' && (
@@ -1199,10 +1223,12 @@ export default function PedirOnline() {
                   <span>Subtotal (itens)</span>
                   <span className="font-semibold">{formatPrice(subtotalItens)}</span>
                 </div>
-                {taxaEntrega > 0 && (
+                {checkout.tipo === 'delivery' && (
                   <div className="flex justify-between">
                     <span>Taxa de entrega</span>
-                    <span className="font-semibold">{formatPrice(taxaEntrega)}</span>
+                    <span className={`font-semibold ${taxaEntrega === 0 ? 'text-emerald-600' : ''}`}>
+                      {taxaEntrega === 0 ? 'Grátis' : formatPrice(taxaEntrega)}
+                    </span>
                   </div>
                 )}
                 <p className="pt-1 text-xl font-semibold text-slate-900">Total: {formatPrice(totalPrice)}</p>
@@ -1229,6 +1255,9 @@ export default function PedirOnline() {
             <span className="text-lg font-semibold">Ver carrinho</span>
             <span className="text-lg font-semibold">{formatPrice(totalPrice)}</span>
           </div>
+          {checkout.tipo === 'delivery' && taxaEntrega === 0 && (
+            <p className="mt-1 text-xs font-medium text-emerald-300">Entrega grátis hoje</p>
+          )}
           {taxaEntrega > 0 && (
             <p className="mt-1 text-xs font-medium text-white/80">Inclui taxa de entrega ({formatPrice(taxaEntrega)})</p>
           )}
