@@ -298,6 +298,23 @@ export function buildPedidoOnlinePrintHtml(d) {
     ? `<div class="obs-pedido"><span class="lab">Obs.:</span> ${escHtml(obs)}</div>`
     : ''
 
+  const subtotalItens = d.subtotal_itens != null
+    ? Number(d.subtotal_itens)
+    : items.reduce((s, p) => s + Number(p.quantity || 0) * Number(p.unit_price || 0), 0)
+  const valorTotal = d.valor_total != null ? Number(d.valor_total) : subtotalItens
+  const taxaEntrega = tipo === 'delivery'
+    ? (d.taxa_entrega != null ? Number(d.taxa_entrega) : Math.max(0, valorTotal - subtotalItens))
+    : 0
+  const entregaGratis = tipo === 'delivery' && taxaEntrega === 0
+
+  const totaisHtml = tipo === 'delivery'
+    ? `
+    <div class="tot-linha tot-base">Subtotal (itens): R$ ${fmtMoney(subtotalItens)}</div>
+    <div class="tot-linha tot-serv">Taxa de entrega: ${entregaGratis ? 'GRÁTIS' : `R$ ${fmtMoney(taxaEntrega)}`}</div>
+    <div class="tot-linha tot-pagar">Total: R$ ${fmtMoney(valorTotal)}</div>`
+    : `
+    <div class="tot-linha tot-pagar">Total: R$ ${fmtMoney(valorTotal)}</div>`
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -323,8 +340,7 @@ export function buildPedidoOnlinePrintHtml(d) {
     ${enderecoHtml}
     ${obsHtml}
     <table class="itens" role="presentation"><tbody>${rows}</tbody></table>
-    <div class="totais">
-      <div class="tot-linha tot-pagar">Total: R$ ${fmtMoney(d.valor_total)}</div>
+    <div class="totais">${totaisHtml}
     </div>
   </div>
 </body>

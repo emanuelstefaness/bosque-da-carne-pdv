@@ -217,7 +217,8 @@ export default function PedirOnline() {
   const [step, setStep] = useState('menu')
   const [menu, setMenu] = useState({ categories: [], items: [] })
   const [taxaEntregaDelivery, setTaxaEntregaDelivery] = useState(TAXA_ENTREGA_FALLBACK)
-  const [entregaGratis, setEntregaGratis] = useState(false)
+  const [onlineAtivo, setOnlineAtivo] = useState(true)
+  const [mensagemFechado, setMensagemFechado] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -266,6 +267,8 @@ export default function PedirOnline() {
           return { ...it, image, imageFallback }
         })
         setMenu({ ...data, items })
+        setOnlineAtivo(data.online_ativo !== false)
+        setMensagemFechado(data.mensagem_fechado || 'Pedidos online indisponíveis no momento.')
         if (typeof data.taxa_entrega_delivery === 'number') {
           setTaxaEntregaDelivery(data.taxa_entrega_delivery)
           setEntregaGratis(data.taxa_entrega_delivery === 0 || !!data.entrega_gratis)
@@ -792,6 +795,21 @@ export default function PedirOnline() {
           </button>
           <Link to="/" className="mt-3 block text-sm text-slate-600 hover:underline">Voltar ao início</Link>
         </div>
+      </div>
+    )
+  }
+
+  if (!loading && !onlineAtivo) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-6 text-center">
+        <h1 className="text-2xl font-bold text-slate-900">Bosque da Carne</h1>
+        <p className="mt-2 text-sm font-medium uppercase tracking-wide text-slate-500">Pedidos online</p>
+        <div className="mt-8 max-w-md rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <p className="text-4xl">⏸️</p>
+          <h2 className="mt-3 text-xl font-semibold text-amber-900">Indisponível hoje</h2>
+          <p className="mt-3 text-base leading-relaxed text-amber-950">{mensagemFechado}</p>
+        </div>
+        <Link to="/" className="mt-8 text-sm text-slate-600 hover:underline">Voltar ao início</Link>
       </div>
     )
   }

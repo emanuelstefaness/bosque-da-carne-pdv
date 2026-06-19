@@ -3,6 +3,7 @@ import { broadcastAll } from '../socket.js';
 import { getPedidoSector } from '../itemSector.js';
 import { resolveLancheAddonsFromBody } from '../lancheAddons.js';
 import { getTaxaEntregaDelivery, entregaGratisAtiva } from '../deliveryFee.js';
+import { isPedidosOnlineAtivo, statusPedidosOnline, MENSAGEM_ONLINE_FECHADO } from '../onlineSystem.js';
 
 export const publicRouter = Router();
 const getDb = (req) => req.app.get('db');
@@ -30,17 +31,23 @@ publicRouter.get('/menu', (req, res) => {
       .all(...catIds);
   }
   const taxa_entrega_delivery = getTaxaEntregaDelivery();
+  const online = statusPedidosOnline();
   res.json({
-    categories,
-    items,
+    categories: online.online_ativo ? categories : [],
+    items: online.online_ativo ? items : [],
     taxa_entrega_delivery,
     entrega_gratis: entregaGratisAtiva(),
+    online_ativo: online.online_ativo,
+    mensagem_fechado: online.mensagem_fechado,
   });
 });
 
 // Criar pedido online → cria order, comanda (id 201+), pedidos; emite alerta
 publicRouter.post('/orders', (req, res) => {
   try {
+  if (!isPedidosOnlineAtivo()) {
+    return res.status(503).json({ error: MENSAGEM_ONLINE_FECHADO });
+  }
   const db = getDb(req);
   if (!db) return res.status(500).json({ error: 'Banco de dados não disponível' });
   const {

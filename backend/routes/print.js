@@ -68,6 +68,20 @@ printRouter.get('/order/:id', (req, res) => {
     WHERE oi.order_id = ?
     ORDER BY oi.id
   `).all(id);
+
+  let subtotalItens = 0;
+  for (const row of items) {
+    subtotalItens += Number(row.quantity || 0) * Number(row.unit_price || 0);
+  }
+  subtotalItens = Math.round(subtotalItens * 100) / 100;
+
+  const tipo = String(order.tipo || '').toLowerCase();
+  const valorTotal = Math.round(Number(order.valor_total || 0) * 100) / 100;
+  let taxaEntrega = 0;
+  if (tipo === 'delivery') {
+    taxaEntrega = Math.round(Math.max(0, valorTotal - subtotalItens) * 100) / 100;
+  }
+
   res.json({
     logo: 'BOSQUE DA CARNE',
     tipo: order.tipo,
@@ -83,7 +97,10 @@ printRouter.get('/order/:id', (req, res) => {
     endereco_referencia: order.endereco_referencia,
     observacoes: order.observacoes,
     items,
-    valor_total: order.valor_total,
+    subtotal_itens: subtotalItens,
+    taxa_entrega: taxaEntrega,
+    entrega_gratis: tipo === 'delivery' && taxaEntrega === 0,
+    valor_total: valorTotal,
     created_at: order.created_at
   });
 });
