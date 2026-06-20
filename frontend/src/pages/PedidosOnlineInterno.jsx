@@ -227,8 +227,8 @@ export default function PedidosOnlineInterno() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {order.status === 'recebido' && (
-                        <button type="button" className="btn btn-info text-sm" onClick={() => handleStatus(order.id, 'em_producao')}>
-                          Em produção
+                        <button type="button" className="btn btn-success text-sm font-semibold" onClick={() => handleStatus(order.id, 'em_producao')}>
+                          Confirmar pedido
                         </button>
                       )}
                       {order.status === 'em_producao' && (

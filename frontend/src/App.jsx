@@ -15,6 +15,7 @@ import TvCozinha from './pages/TvCozinha'
 import TvBar from './pages/TvBar'
 import PedirOnline from './pages/PedirOnline'
 import PedidosOnlineInterno from './pages/PedidosOnlineInterno'
+import PedirOnlineAcompanhar from './pages/PedirOnlineAcompanhar'
 
 function RequerLogin({ children }) {
   const { waiter } = useWaiter()
@@ -75,6 +76,8 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/pedir" element={<PedirOnline />} />
+          <Route path="/acompanhar" element={<PedirOnlineAcompanhar />} />
+          <Route path="/acompanhar/:orderId" element={<PedirOnlineAcompanhar />} />
           <Route path="/garcons" element={<RequerLogin><Garcons /></RequerLogin>} />
           <Route path="/garcons/:comandaId/pedidos" element={<RequerLogin><Pedidos /></RequerLogin>} />
           <Route path="/cozinha" element={<SemAcessoGarcom><Cozinha /></SemAcessoGarcom>} />

@@ -1,12 +1,7 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { getApiBase } from '../devApiBase'
-import {
-  isStatusTerminal,
-  stepsForTipo,
-  subtituloStatusCliente,
-  tituloAcompanhamento,
-} from '../utils/pedidoOnlineClienteStatus'
+import PedidoOnlineAcompanhamento, { lerPedidoLocal, salvarPedidoLocal } from '../components/PedidoOnlineAcompanhamento'
 import {
   lancheComOpcionaisAdicionais,
   itemAceitaCebolaCaramelizada,
@@ -223,8 +218,7 @@ export default function PedirOnline() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [lastOrder, setLastOrder] = useState(null)
-  const [orderPollError, setOrderPollError] = useState(null)
-  const orderPollRef = useRef(null)
+  const [pedidoSalvoLocal, setPedidoSalvoLocal] = useState(() => lerPedidoLocal())
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [modalProduct, setModalProduct] = useState(null)
   const [modalQty, setModalQty] = useState(1)
@@ -289,37 +283,11 @@ export default function PedirOnline() {
 
   useEffect(() => { loadMenu() }, [])
 
-  useEffect(() => {
-    orderPollRef.current = lastOrder
-  }, [lastOrder])
-
-  /** Atualiza status do pedido na tela de confirmação (polling na API pública). */
-  useEffect(() => {
-    if (step !== 'done' || !lastOrder?.id) return undefined
-    const id = lastOrder.id
-    let cancelled = false
-    const poll = async () => {
-      if (cancelled) return
-      const cur = orderPollRef.current
-      if (cur?.status && isStatusTerminal(cur.status)) return
-      try {
-        const r = await fetch(`${apiBase}/api/public/orders/${id}`)
-        if (!r.ok) throw new Error('Não foi possível buscar o status do pedido.')
-        const data = await r.json()
-        if (cancelled) return
-        setLastOrder((prev) => ({ ...prev, ...data, tipo: data.tipo || prev?.tipo }))
-        setOrderPollError(null)
-      } catch (e) {
-        if (!cancelled) setOrderPollError(e.message || 'Erro de conexão.')
-      }
-    }
-    poll()
-    const iv = setInterval(poll, 4000)
-    return () => {
-      cancelled = true
-      clearInterval(iv)
-    }
-  }, [step, lastOrder?.id, apiBase])
+  const resetNovoPedido = () => {
+    setStep('menu')
+    setLastOrder(null)
+    setCart([])
+  }
 
   const categoriesBySlug = useMemo(() => {
     const m = {}
@@ -668,12 +636,13 @@ export default function PedirOnline() {
       })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(data.error || `Falha ao enviar pedido (${r.status})`)
-      setOrderPollError(null)
       setLastOrder({
         ...data,
         tipo: data.tipo || checkout.tipo,
         status: data.status || 'recebido',
       })
+      salvarPedidoLocal(data, checkout.cliente_telefone)
+      setPedidoSalvoLocal(lerPedidoLocal())
       setStep('done')
       setIsCartOpen(false)
     } catch (err) {
@@ -695,107 +664,14 @@ export default function PedirOnline() {
   }
 
   if (step === 'done' && lastOrder) {
-    const tipo = lastOrder.tipo === 'delivery' ? 'delivery' : 'retirada'
-    const st = lastOrder.status || 'recebido'
-    const steps = stepsForTipo(tipo)
-    const found = steps.findIndex((s) => s.status === st)
-    const curIdx =
-      st === 'cancelado'
-        ? -1
-        : st === 'entregue'
-          ? steps.length
-          : Math.max(0, found >= 0 ? found : 0)
-    const cancelado = st === 'cancelado'
-
     return (
-      <div className="menu-bg min-h-screen p-5">
-        <div className="mx-auto max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-card">
-          <h1
-            className={`text-2xl font-bold sm:text-3xl ${
-              cancelado ? 'text-red-700' : st === 'entregue' ? 'text-emerald-700' : 'text-slate-900'
-            }`}
-          >
-            {tituloAcompanhamento(st)}
-          </h1>
-          <p className="mt-2 text-slate-700">Pedido #{lastOrder.id}</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">{formatPrice(lastOrder.valor_total)}</p>
-          {!cancelado && (
-            <p className="mt-2 text-base font-medium text-[hsl(var(--menu-primary))]">
-              {subtituloStatusCliente(st, tipo)}
-            </p>
-          )}
-          {lastOrder.message && !cancelado && (
-            <p className="mt-2 text-sm text-slate-600">{lastOrder.message}</p>
-          )}
-
-          {cancelado && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-left text-red-950">
-              <p className="text-sm font-bold uppercase tracking-wide text-red-800">Motivo</p>
-              <p className="mt-1 text-sm leading-relaxed">
-                {String(lastOrder.motivo_cancelamento || '').trim() || 'Não informado pelo restaurante.'}
-              </p>
-            </div>
-          )}
-
-          {!cancelado && (
-            <div className="mt-6 text-left">
-              <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Andamento</p>
-              <ol className="space-y-0">
-                {steps.map((s, i) => {
-                  const passed = i < curIdx
-                  const current = i === curIdx && st === s.status
-                  const pending = i > curIdx
-                  return (
-                    <li
-                      key={s.status}
-                      className={`relative flex gap-3 border-l-2 py-2 pl-4 ${
-                        passed ? 'border-emerald-500' : current ? 'border-[hsl(var(--menu-primary))]' : 'border-slate-200'
-                      }`}
-                    >
-                      <span
-                        className={`absolute -left-[9px] top-3 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          passed
-                            ? 'bg-emerald-500 text-white'
-                            : current
-                              ? 'bg-[hsl(var(--menu-primary))] text-white'
-                              : 'border border-slate-300 bg-white text-transparent'
-                        }`}
-                      >
-                        {passed ? '✓' : ''}
-                      </span>
-                      <div className={pending ? 'opacity-55' : ''}>
-                        <p className={`text-sm font-bold ${current ? 'text-[hsl(var(--menu-primary))]' : 'text-slate-800'}`}>{s.label}</p>
-                        <p className="text-xs text-slate-600">{s.desc}</p>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ol>
-            </div>
-          )}
-
-          {orderPollError && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-900">{orderPollError}</p>
-          )}
-          {!cancelado && !isStatusTerminal(st) && (
-            <p className="mt-3 text-center text-xs text-slate-500">Atualizamos o status automaticamente a cada poucos segundos.</p>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              setStep('menu')
-              setLastOrder(null)
-              setOrderPollError(null)
-              setCart([])
-            }}
-            className="mt-6 w-full rounded-xl bg-[hsl(var(--menu-primary))] py-3 font-bold text-white"
-          >
-            Fazer outro pedido
-          </button>
-          <Link to="/" className="mt-3 block text-sm text-slate-600 hover:underline">Voltar ao início</Link>
-        </div>
-      </div>
+      <PedidoOnlineAcompanhamento
+        orderId={lastOrder.id}
+        apiBase={apiBase}
+        initialOrder={lastOrder}
+        telefoneConsulta={checkout.cliente_telefone}
+        onNovoPedido={resetNovoPedido}
+      />
     )
   }
 
@@ -820,13 +696,18 @@ export default function PedirOnline() {
         <header className="px-4 py-4 text-white">
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
             <h1 className="text-lg font-semibold tracking-wide">Bosque da Carne</h1>
-            <button
-              type="button"
-              onClick={() => setIsCartOpen(true)}
-              className="shrink-0 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium"
-            >
-              Carrinho ({totalItems})
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link to="/acompanhar" className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium">
+                Acompanhar
+              </Link>
+              <button
+                type="button"
+                onClick={() => setIsCartOpen(true)}
+                className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-medium"
+              >
+                Carrinho ({totalItems})
+              </button>
+            </div>
           </div>
           <p className="mx-auto mt-1 w-full max-w-5xl text-xs text-slate-300">Pedidos online</p>
         </header>
@@ -853,6 +734,15 @@ export default function PedirOnline() {
 
       {step === 'menu' && (
         <main className="mx-auto mt-5 w-full max-w-5xl px-4">
+          {pedidoSalvoLocal?.id && (
+            <Link
+              to={`/acompanhar/${pedidoSalvoLocal.id}`}
+              className="mb-4 flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950 hover:bg-amber-100"
+            >
+              <span>📦 Continuar acompanhando pedido #{pedidoSalvoLocal.id}</span>
+              <span className="text-amber-700">Ver →</span>
+            </Link>
+          )}
           {error && (
             <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {error}

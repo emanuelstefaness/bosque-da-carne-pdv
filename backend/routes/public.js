@@ -269,11 +269,20 @@ publicRouter.post('/orders', (req, res) => {
   }
 });
 
-// Status do pedido (opcional, para cliente consultar)
+// Status do pedido (cliente consulta acompanhamento)
 publicRouter.get('/orders/:id', (req, res) => {
   const db = getDb(req);
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(req.params.id));
+  const id = Number(req.params.id);
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+  const telReq = String(req.query.telefone || '').replace(/\D/g, '');
+  const telOrder = String(order.cliente_telefone || '').replace(/\D/g, '');
+  if (telReq && telOrder) {
+    const ok = telReq === telOrder || telOrder.endsWith(telReq.slice(-8)) || telOrder.endsWith(telReq.slice(-4));
+    if (!ok) return res.status(403).json({ error: 'Telefone não confere com este pedido' });
+  }
+
   const items = db.prepare(`
     SELECT oi.*, i.name as item_name
     FROM order_items oi
