@@ -212,6 +212,7 @@ export default function PedirOnline() {
   const [step, setStep] = useState('menu')
   const [menu, setMenu] = useState({ categories: [], items: [] })
   const [taxaEntregaDelivery, setTaxaEntregaDelivery] = useState(TAXA_ENTREGA_FALLBACK)
+  const [entregaGratis, setEntregaGratis] = useState(false)
   const [onlineAtivo, setOnlineAtivo] = useState(true)
   const [mensagemFechado, setMensagemFechado] = useState('')
   const [loading, setLoading] = useState(true)
